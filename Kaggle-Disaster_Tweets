@@ -1,0 +1,137 @@
+import numpy as np
+import pandas as pd
+import os
+
+os.getcwd()
+
+os.chdir("C:\\Users\\gurme\\OneDrive\\Documents\\Documents\\Gagan\\DS\\DS\\Python\\Kaggle Comps\\Disaster Tweets\\")
+
+train=pd.read_csv("train.csv")
+test=pd.read_csv("test.csv")
+
+train.shape
+
+test.shape
+
+train.columns
+
+test.columns
+
+train.head()
+
+train.drop(["keyword","location"],1,inplace=True)
+test.drop(["keyword","location"],1,inplace=True)
+
+train.columns
+
+train.drop(["id"],1,inplace=True)
+
+test.drop(["id"],1,inplace=True)
+
+train.columns
+
+test.columns
+
+x_train=train["text"]
+y_train=train["target"]
+
+ from nltk import word_tokenize
+from tensorflow.keras.preprocessing.text import Tokenizer
+
+sent_lens=[]
+for sent in train["text"]:
+    sent_lens.append(len(word_tokenize(sent)))
+
+word_tokenize(sent)
+
+
+
+max(sent_lens)
+
+tok = Tokenizer(char_level=False,split=' ')
+
+tok.fit_on_texts(x_train)
+
+x_train
+
+sequences_train = tok.texts_to_sequences(x_train)
+
+vocab_len=len(tok.index_word.keys())
+
+vocab_len
+
+from tensorflow.keras.preprocessing import sequence
+from tensorflow.keras.layers import LSTM, Activation, Dense, Dropout, Input, Embedding
+from tensorflow.keras.models import Model
+
+max_len=72
+
+sequences_matrix_train = sequence.pad_sequences(sequences_train,maxlen=max_len)
+
+sequences_matrix_train.shape
+
+def RNN():
+    inputs = Input(name='inputs',shape=[max_len])
+    
+    layer = Embedding(vocab_len+1,500,input_length=max_len,
+                      mask_zero=True)(inputs)
+    layer = LSTM(64)(layer)
+    layer = Dense(256,name='FC1')(layer)
+    layer = Activation('relu')(layer)
+    layer = Dropout(0.5)(layer)
+    layer = Dense(1,name='out_layer')(layer)
+    layer = Activation('sigmoid')(layer)
+    model = Model(inputs=inputs,outputs=layer)
+    return model
+
+model = RNN()
+model.summary()
+
+model.compile(loss='binary_crossentropy',optimizer='adam',
+              metrics=['accuracy'])
+
+test=test["text"]
+
+sequences_test = tok.texts_to_sequences(test)
+sequences_matrix_test = sequence.pad_sequences(sequences_test,
+                                               maxlen=max_len)
+
+model.fit(sequences_matrix_train,y_train.values,batch_size=100,
+          epochs=5,validation_split=0.1)
+
+predictions=model.predict(sequences_matrix_test)
+
+train_score=model.predict(sequences_matrix_train)
+train_score=np.reshape(train_score,train_score.shape[0])
+
+
+real=y_train
+real.shape
+
+cutoffs=np.linspace(0.001,0.999,999)
+KS=[]
+for cutoff in cutoffs:
+    predicted=(train_score>cutoff).astype(int)
+    FP=((real==0)&(predicted==1)).sum()
+    TN=((real==0)&(predicted==0)).sum()
+    FN=((real==1)&(predicted==0)).sum()
+    TP=((real==1)&(predicted==1)).sum()
+    
+    ks=(TP/(TP+FN))-(FP/(TN+FP))
+    KS.append(ks)
+
+ks_cutoff=np.array(KS)[KS==max(KS)][0]
+
+ks_cutoff
+
+predictions=model.predict(sequences_matrix_test)
+hard_class_predictions_nhom=(np.reshape(predictions,predictions.shape[0])>ks_cutoff).astype(int)
+
+hard_class_predictions_nhom
+
+test=pd.read_csv("test.csv")
+
+final_predictions=pd.DataFrame({"id":test.id,"target":hard_class_predictions_nhom})
+
+final_predictions.to_csv("Kaggle_DisasterTweets.csv")
+
